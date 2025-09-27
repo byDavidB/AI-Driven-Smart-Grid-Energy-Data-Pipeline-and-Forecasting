@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test-and-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run tests
+        run: pytest -q
+
+      - name: Streamlit smoke test
+        env:
+          API_BASE_URL: http://localhost:9999  # deliberately unreachable; UI should still render
+        run: |
+          nohup streamlit run streamlit/app.py --server.headless true --server.port 8501 &
+          for i in {1..20}; do
+            if curl -fsS http://localhost:8501/ >/dev/null 2>&1; then
+              echo "Streamlit is up"; break; fi; sleep 1; done
+          curl -f http://localhost:8501/ | head -c 500
+
+      - name: Shutdown background processes
+        if: always()
+        run: pkill -f "streamlit" || true
