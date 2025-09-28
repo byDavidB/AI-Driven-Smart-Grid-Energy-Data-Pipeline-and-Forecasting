@@ -1,10 +1,17 @@
+from importlib import util as importlib_util
+from pathlib import Path
 from unittest.mock import patch, MagicMock
 
 from streamlit import runtime  # type: ignore  # noqa: F401  (ensures streamlit caches are initialized if needed)
 
 import streamlit as st  # noqa: F401
 
-import streamlit.app as app_module  # type: ignore
+# Load the dashboard module directly from the repo to avoid clashing with the third-party streamlit package
+_streamlit_app_path = Path(__file__).resolve().parents[1] / "streamlit" / "app.py"
+_spec = importlib_util.spec_from_file_location("streamlit_dashboard_app", _streamlit_app_path)
+app_module = importlib_util.module_from_spec(_spec)
+assert _spec and _spec.loader  # narrow type checkers
+_spec.loader.exec_module(app_module)
 
 
 def test_fetch_json_success():
@@ -19,6 +26,9 @@ def test_fetch_json_success():
 
 
 def test_fetch_json_error():
+    # Clear cache so error path isn't short-circuited by previous call
+    app_module.fetch_json.clear()
+
     mock_response = MagicMock()
     mock_response.raise_for_status.side_effect = Exception("boom")
 

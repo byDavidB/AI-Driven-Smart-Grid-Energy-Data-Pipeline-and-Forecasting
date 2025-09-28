@@ -1,11 +1,10 @@
 # Orchestrates the database, API, and dashboard services for local development
-version: "3.9"
 
 services:
   # PostgreSQL instance for persisting climate-related data
-  postgres:
+  db:
     image: postgres:16
-    container_name: climate-postgres
+    container_name: gridmatch-db
     restart: unless-stopped
     env_file:
       - .env
@@ -17,6 +16,7 @@ services:
       - "5432:5432"  # expose the default PostgreSQL port to the host
     volumes:
       - postgres-data:/var/lib/postgresql/data  # persist database state across restarts
+      - ./infra/init.sql:/docker-entrypoint-initdb.d/01_init.sql:ro  # auto-run schema on first start
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U  -d "]
       interval: 10s
@@ -24,15 +24,16 @@ services:
       retries: 5
       start_period: 10s
 
-  # FastAPI backend serving the climate API
-  fastapi:
+  # FastAPI backend serving the climate API and ETL CLI
+  api:
+    container_name: gridmatch-api
     build:
       context: ./fastapi
       dockerfile: Dockerfile
     env_file:
       - .env
     depends_on:
-      postgres:
+      db:
         condition: service_healthy  # wait for Postgres to be ready before starting
     ports:
       - "8000:8000"  # bind FastAPI service to localhost:8000
@@ -49,7 +50,7 @@ services:
     env_file:
       - .env
     depends_on:
-      - fastapi  # require the API to be reachable before booting Streamlit
+      - api  # require the API to be reachable before booting Streamlit
     ports:
       - "8501:8501"  # expose the dashboard on localhost:8501
     volumes:

@@ -1,71 +1,78 @@
 # AI-Driven Smart Grid Energy Data Pipeline and Forecasting
 
-This repository hosts a Streamlit dashboard (and future supporting services) for an AIâ€‘driven smart grid energy data pipeline and forecasting platform.
+This repository hosts a local development stack for an AI-driven smart grid energy data pipeline and forecasting platform. It includes a Streamlit dashboard, a FastAPI service (also home to ETL jobs), and a Postgres warehouse provisioned with Bronze/Silver/Gold tables.
 
-## Components (current)
+## Repository layout
 
-- `streamlit/app.py` â€” Front-end dashboard querying a FastAPI backend (expected at `API_BASE_URL`).
+- `docker-compose.yml` - defines `db` (Postgres), `api` (FastAPI/ETL), and `streamlit` services.
+- `infra/init.sql` - creates the raw/fact/mart tables on the first database start.
+- `fastapi/` - FastAPI application code, ETL modules, Docker build context, and requirements.
+- `streamlit/` - Streamlit dashboard code, Docker build context, and runtime requirements.
+- `.env.example` - sample configuration; copy to `.env` for local use.
+- `tests/` - pytest suite covering utility functions (e.g. Streamlit helpers).
 
-## Quick Start (Local)
+## Quick start
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-API_BASE_URL=http://localhost:8000 streamlit run streamlit/app.py --server.headless true
+cp .env.example .env
+# (optional) tweak credentials or site coordinates in .env
+
+docker compose down -v
+docker compose up --build -d
 ```
 
-If you don't have the FastAPI backend running yet, the dashboard will show error messages in the health sections but will still load.
+Services:
+- FastAPI docs: http://localhost:8000/docs
+- Streamlit UI: http://localhost:8501
+- Postgres: localhost:5432 (`db` from inside containers)
 
-## Environment Variables
+## NASA POWER ingest
 
-| Variable | Purpose | Default |
-|----------|---------|---------|
-| `API_BASE_URL` | Base URL of the FastAPI service the dashboard queries | `http://fastapi:8000` |
+```bash
+# run inside the api container; adjust dates/site as needed
+docker compose exec api python -m app.etl.nasa --start 20250101 --end 20250107
+```
 
-## Testing
+The CLI fetches hourly NASA POWER data, aligns the parameters, and upserts them into `raw_weather` (Bronze layer). Re-running the same window updates rows without duplication.
+
+## Climate API endpoints
+
+- `GET /weather/sites` - list the sites currently present in `raw_weather`.
+- `GET /weather/hourly?site=...&hours=24` - return the most recent hourly data for the selected site (idempotent, supports up to 336 hours).
+- `GET /` - summary payload including row counts and latest timestamps (used by the dashboard overview).
+
+## Running tests
 
 ```bash
 pytest -q
 ```
 
-## CI
+## Continuous Integration
 
-GitHub Actions workflow runs on every push / PR:
-1. Installs dependencies
-2. Runs tests
-3. Boots Streamlit headlessly and curls the root page as a smoke check
+`.github/workflows/ci.yml` installs dependencies, executes pytest, and runs a Streamlit smoke test on every push or pull request.
 
-## Next Ideas
+## Next steps
 
-- Add FastAPI backend service
-- Add forecasting model service (Prophet / XGBoost / LSTM)
-- Docker multi-service compose stack
-- Deployment workflow (Streamlit Community Cloud or container registry)
+1. Build cleaners and feature jobs that populate Silver/Gold tables.
+2. Expand the API with aggregate and forecasting endpoints.
+3. Add richer dashboard visuals (forecasts, KPIs, comparisons).
 
 ## License
 
-Add a license (MIT recommended) â€” not yet included.
-# ClimateProject Stack
+License to be added (MIT recommended).
 
-## Getting started
 
-1. Copy .env.example to .env and tailor the values (especially database credentials).
-2. Build and start the stack:
-   `ash
-   docker compose up --build
-   `
-3. Access the services:
-   - FastAPI: http://localhost:8000/docs
-   - Streamlit: http://localhost:8501
+## Silver cleaner
 
-## Service layout
+~~~bash
+# run inside the api container; cleans Bronze -> Silver for the window
+docker compose exec api python -m app.transform.silver_clean --start 20250101 --end 20250107
+~~~
 
-- docker-compose.yml wires Postgres, FastAPI, and Streamlit services.
-- astapi/ contains the API app and Docker build context.
-- streamlit/ contains the Streamlit dashboard and Docker build context.
+The transformer enforces hourly UTC timestamps, validates ranges, and upserts into fact_weather.
 
-## Development notes
+## Dashboard pages
 
-- Hot reloading is enabled via the bind mounts in docker-compose.yml. Edit the local source files to see changes without rebuilding images.
-- For database tooling, connect to Postgres on localhost:5432 using the credentials defined in your .env file.
+1. **Data Health** — metrics tile (raw vs clean), drop reasons, completeness heatmap.
+2. **Weather Trends** — raw vs cleaned line charts and minute histogram to verify hourly alignment.
+3. **Schema & Lineage** — Sankey-style pipeline view and table descriptions.
