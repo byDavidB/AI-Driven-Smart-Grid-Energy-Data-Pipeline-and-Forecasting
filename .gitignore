@@ -1,22 +1,10 @@
-# General
-.DS_Store
-Thumbs.db
+*.swp
+package-lock.json
+__pycache__
+.pytest_cache
+.venv
+*.egg-info
 
-# Python
-__pycache__/
-*.py[cod]
-*.class
-
-# Envs
-.env
-venv/
-.env*/
-
-# Build
-build/
-dist/
-*.egg-info/
-
-# IDE
-.vscode/
-.idea/
+# CDK asset staging directory
+.cdk.staging
+cdk.out
